@@ -1,0 +1,25 @@
+Using the clojurescript repl:
+Make sure phantomjs is installed.
+
+
+$ lein repl
+
+user=> (cemerick.austin.repls/exec) ;; default using phantomjs, OR
+user=> (cemerick.austin.repls/exec :exec-cmds ["open" "-ga" "/Applications/Google Chrome.app"]) ;; open a tab in Chrome on Mac
+
+
+Browser-REPL ready @ http://localhost:48005/7561/repl/start
+Type `:cljs/quit` to stop the ClojureScript REPL
+nil
+cljs.user=> (apply + (js/Array 342 234 234 2345))
+3155
+cljs.user=> :cljs/quit
+:cljs/quit
+user=>
+
+
+
+
+Running clojurescript tests:
+$ lein cljsbuild test
+
