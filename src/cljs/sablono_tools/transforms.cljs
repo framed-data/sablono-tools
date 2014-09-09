@@ -2,21 +2,37 @@
   (:require [clojure.walk :as walk]))
 
 ;; based on enlive-html but using the sablono template format rather than html:
-;; [tag attrs content*]
+;; [tag attrs? content*]
 
 (def any-node (constantly true))
 
+(defn tag=
+  [elt tag]
+  (and (sequential? elt)
+       (first elt)
+       (= (first elt) tag)))
+
+(defn attrs
+  [elt]
+  (when (and (sequential? elt)
+             (second elt)
+             (map? (second elt)))
+    (second elt)))
+
 (defn id=
   [elt id]
-  (and (sequential? elt)
-       (second elt)
-       (= (:id (second elt)) id)))
+  (let [attrs (attrs elt)]
+    (and attrs
+         (= (:id attrs) id))))
 
 
 (defn content
   "Replaces the content of the element."
-  [& [values]]
-  #(assoc % 2 values))
+  [& values]
+  (fn [elt]
+    (let [tag (elt 0)
+          attrs (attrs elt)]
+      (vec (concat [tag attrs] values)))))
 
 
 ;; REMINDER: this function uses the JS string.replace:
@@ -59,6 +75,9 @@
   [template f]
   (transform-nodes template (constantly true) f))
 
+(defn transform-nodes-with-tag
+  [template tag f]
+  (transform-nodes template (fn [node] (tag= node tag)) f))
 
 (defn transform-node-with-id
   [template id f]
@@ -67,13 +86,14 @@
 
 (defn parse-pair
   [[selector] f] ;; TODO there may be more than one selector
-  (let [key (name selector)] ;; assuming selector is a keyword
-    (if-let [v (re-find #"\#(.+)" key)] ;; id matcher; key starts with a #
+  (let [tag (name selector)] ;; assuming selector is a keyword
+    (if-let [v (re-find #"\#(.+)" tag)] ;; id matcher; tag starts with a #
       (let [id (second v)]
           #(transform-node-with-id % id f))
-      (if (= key "html") ;; we'll interpret this as a universal selector, thus making 'any-node' redundant
-        #(transform-all-nodes % f)
-        (println "unknown key:" key)))))
+      (let [tag selector]
+        (if (= tag :html) ;; we'll interpret this as a universal selector, thus making 'any-node' redundant
+          #(transform-all-nodes % f)
+          #(transform-nodes-with-tag % tag f))))))
 
 
 (defn template

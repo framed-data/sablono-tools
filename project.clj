@@ -15,24 +15,16 @@
   :profiles {:dev {:plugins [[com.cemerick/austin "0.1.5"]
                              [com.keminglabs/cljx "0.4.0" :exclusions [org.clojure/clojure]]]}}
 
-  :cljx {:builds [{:source-paths ["src/cljx"]
-                   :output-path "target/generated/clj"
-                   :rules :clj}
 
-                  {:source-paths ["src/cljx"]
-                   :output-path "target/generated/cljs"
-                   :rules :cljs}]}
-
-
-  :cljsbuild {:builds [{:source-paths ["src/cljs" "target/generated/cljs" "test"]
+  :cljsbuild {:builds [{:source-paths ["src/cljs" "test"]
                         :compiler {:output-to "target/cljs/whitespace.js"
                                    :optimizations :whitespace
                                    :pretty-print true}}
-                       {:source-paths ["src/cljs" "target/generated/cljs" "test"]
+                       {:source-paths ["src/cljs" "test"]
                         :compiler {:output-to "target/cljs/simple.js"
                                    :optimizations :simple
                                    :pretty-print true}}
-                       {:source-paths ["src/cljs" "target/generated/cljs" "test"]
+                       {:source-paths ["src/cljs" "test"]
                         :compiler {:output-to "target/cljs/advanced.js"
                                    :optimizations :advanced
                                    :pretty-print true}}]

@@ -4,28 +4,53 @@
             [sablono-tools.transforms :refer [replace-vars content any-node template]]))
 
 
-(deftest any-node-test
-  (let [source-template [:html
-                         [:div "Tipping Points ${report-date}"
-                          [:a {:href "${model-predictions}"} "Click here"]]]
-        vars {:n-days 7
-              :report-date "2014-01-01"
+(deftest tag-and-content-test
+  (let [source [:div
+                [:p "Replace me"]
+                [:p "Me Too"]]
+
+        forms [[:p] (content "New Text")]
+
+        expected [:div
+                  [:p nil "New Text"]
+                  [:p nil "New Text"]]]
+
+    (is (= (template source forms) expected)
+        "tag-and-content replacement failed")))
+
+
+(deftest id-and-content-test
+  (let [source [:html
+                [:div {:id "noonie"} "Replace Me}"]
+                [:div {:id "nunie"} "Not Me"]]
+
+        forms [[:#noonie] (content "foo")]
+
+        expected [:html
+                  [:div {:id "noonie"} "foo"]
+                  [:div {:id "nunie"} "Not Me"]]]
+
+    (is (= (template source forms) expected)
+        "id-and-content replacement failed")))
+
+
+(deftest any-node-replace-vars-test
+  (let [source [:html
+                [:div "Tipping Points ${report-date}"
+                 [:a {:href "${model-predictions}"} "Click here"]]]
+
+        vars {:report-date "2014-01-01"
               :model-predictions "http://example.com/model-predictions.csv"}
-        forms [[:html any-node] (replace-vars vars)]]
 
-    (is (= (template source-template forms)
-           [:html
-            [:div "Tipping Points 2014-01-01"
-             [:a {:href "http://example.com/model-predictions.csv"} "Click here"]]]))))
+        forms [[:html any-node] (replace-vars vars)]
+
+        expected [:html
+                  [:div "Tipping Points 2014-01-01"
+                   [:a {:href "http://example.com/model-predictions.csv"} "Click here"]]]]
+
+    (is (= (template source forms) expected)
+        "replace-vars failed")))
 
 
-(deftest tag-test
-  (let [source-template [:html
-                         [:div {:id "noonie"} "Tipping Points ${report-date}"]]
-        forms [[:#noonie] (content "foo")]]
-
-    (is (= (template source-template forms)
-           [:html
-            [:div {:id "noonie"} "foo"]]))))
 
 
