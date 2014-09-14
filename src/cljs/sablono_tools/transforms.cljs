@@ -19,8 +19,10 @@
   [loc]
   (println "children: loc:" (zip/node loc))
   (when (zip/branch? loc)
+    (println "children: down:" (zip/node (zip/down loc)))
+    (println "children: right:" (map zip/node (right-locs (zip/down loc))))
     (let [val (right-locs (zip/down loc))]
-      (println "children:" (map zip/node val))
+      (println "children: children:" (map zip/node val))
       val)))
 
 (defn descendants
@@ -32,17 +34,6 @@
   (lazy-seq (cons loc (mapcat descendants (children loc)))))
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -86,17 +77,11 @@
 ;;
 ;; Node accessors ;;;;;;;;
 
-#_
-(defn do->
-"Chains (composes) several transformations. Applies functions from left to right."
-[& fns]
-#(reduce (fn [nodes f] (flatmap f nodes)) (as-nodes %) fns))
 
 
-
-;; Predicates ;;;;;;;;;;;;
+;; Node Predicates ;;;;;;;;;;;;
 ;;
-;; A predicate is a Boolean function of a node.
+;; A node predicate is a Boolean function of a node.
 ;;
 
 (def any-node (constantly true))
@@ -124,6 +109,34 @@
 ;;
 ;; Predicates ;;;;;;;;;;;;
 
+;; Loc Predicates ;;;;;;;;
+;;
+;; loc -> Bool
+
+(defn parent-node-is?
+  "Does loc's parent's node satisfy node-pred?"
+  [node-pred]
+  (fn [loc]
+    (let [parent (zip/up loc)]
+      (and parent
+           (node-pred (zip/node parent))))))
+
+(defn ancestor-node-is?
+  "Does some ancestor node of loc satisfy node-pred?"
+  [node-pred]
+  (fn [loc]
+    (println "LOC:" loc)
+    (println "PATH:" (zip/path loc))
+    (some node-pred (zip/path loc))))
+
+(defn my-node-is?
+  "Does loc's own node satisfy node-pred?"
+  [node-pred]
+  (fn [loc]
+    (node-pred (zip/node loc))))
+;;
+;; Loc Predicates ;;;;;;;;
+
 
 
 ;; Transformations ;;;;;;;
@@ -131,9 +144,7 @@
 ;; A transformation is a visitor that returns a map with a
 ;; :node property representing the replacement value for the current node.
 ;;
-
-
-(defn content-bare
+(defn content'
   [& values]
   (fn [node]
     (vec (concat [(tag node) (attrs node)] values))))
@@ -143,49 +154,18 @@
   "Replaces the content of the node."
   [& values]
   (fn [node state]
-    {:node ((apply content-bare values) node)}))
+    {:node ((apply content' values) node)}))
 
 
 ;; REMINDER: this function uses the JS string.replace:
-#_
-(defn replace-vars
+(defn replace-vars'
   "Replace text strings with properties from the map m.
   If m has a property :something, then all occurrences of ${something}
   in the target will be replaced with m's value of :something.
   If the node is a text node, then replacements occur directly in it.
   Otherwise replacements are done in the node's attrs.
   "
-  ([m] (replace-vars #"\$\{\s*([^}]*[^\s}])\s*}" m))
-  ([re m] (replace-vars re m keyword))
-  ([re m f]
-    (let [replacement (fn [match p1]
-                        (m (f p1)))
-          substitute-vars (fn [x]
-                            (cond
-                             (string? x) (.replace x re replacement)
-                             :else x))]
-      (fn [node state]
-        (cond
-         (string? node) {:node (substitute-vars node)}
-         (vector? node) {:node (let [[tag attrs & rest] node]
-                                 (if (map? attrs)
-                                   (assoc node 1
-                                     (into {} (for [[k v] attrs]
-                                                [k (substitute-vars v)])))
-                            node))}
-         :else {:node node})))))
-
-
-(defn replace-vars-bare
-  "Replace text strings with properties from the map m.
-  If m has a property :something, then all occurrences of ${something}
-  in the target will be replaced with m's value of :something.
-  If the node is a text node, then replacements occur directly in it.
-  Otherwise replacements are done in the node's attrs.
-  "
-  ([m] (replace-vars-bare #"\$\{\s*([^}]*[^\s}])\s*}" m))
-  ([re m] (replace-vars-bare re m keyword))
-  ([re m f]
+  [& [re m f]]
     (let [replacement (fn [match p1]
                         (m (f p1)))
           substitute-vars (fn [x]
@@ -201,38 +181,41 @@
                                      (into {} (for [[k v] attrs]
                                                 [k (substitute-vars v)])))
                             node))
-         :else node)))))
+         :else node))))
 
 (defn replace-vars
   ([m] (replace-vars #"\$\{\s*([^}]*[^\s}])\s*}" m))
   ([re m] (replace-vars re m keyword))
   ([re m f]
    (fn [node state]
-     {:node ((replace-vars-bare re m f) node)})))
+     {:node ((replace-vars' re m f) node)})))
 ;;
 ;; Transformations ;;;;;;;
 
 
 
-(defn step->pred
+(defn step->node-pred
   "Convert step into a single predicate Node -> Bool.
   A step may be:
   an explicit predicate function,
   a keyword such as :div (matching nodes with that tag),
   a keyword whose name begins with a # such as :#foo
   (matching nodes with the id 'foo'),
-  or a vector of any of the above
-  (representing the conjunction of the enclosed predicates)."
+  a vector of any of the above
+  (representing the conjunction of the enclosed predicates),
+  or the special form :> (representing direct children of the preceding step)."
   [step]
   (cond
-   (vector? step) (apply conjunction (map step->pred step))
+   (vector? step) (apply conjunction (map step->node-pred step))
    ;; a keyword is also an IFn so check keyword? first:
    (keyword? step) (let [name (name step)]
                          (if-let [v (re-find #"\#(.+)" name)] ; does tag start with a #
                            (let [id (second v)] ; yes: id matcher
                              (id-matcher id))
-                           (let [tag step] ; no: tag matcher
-                             (tag-matcher tag))))
+                           (let [tag step] ; no: tag matcher or special form
+                             (if (= :> tag)
+                               tag
+                               (tag-matcher tag)))))
    (ifn? step) step
    :else step ;; error
    ))
@@ -243,11 +226,9 @@
   :next (skip succeeding visitors on the current node) set to true
   if the predicate is not satisfied."
   [step]
-  (let [f (step->pred step)]
+  (let [f (step->node-pred step)]
     (fn [node state]
       {:next (not (f node))})))
-
-
 
 
 (defn node-zip
@@ -265,8 +246,6 @@
 
 
 
-
-
 ;; Visitors copped from Alex Miller's article:
 ;; http://www.ibm.com/developerworks/library/j-treevisit/index.html
 
@@ -278,10 +257,6 @@
 ;; :next indicating an instruction to skip the rest of the visitors at this :node
 ;; :stop indicating an instruction to stop processing the tree.
 ;;
-
-
-
-
 (defn visit-node
   [start-node start-state visitors]
   (println "Visiting:" start-node)
@@ -328,56 +303,77 @@
            (recur next-loc new-state))))))
 
 
-(defn pred->loc-pred
-  [pred]
-  (fn [loc] (pred (zip/node loc))))
-
-(defn zip-filter
-  "Return all locs in zipper whose nodes satisfy pred."
-  [pred zipper]
-  (loop [loc zipper
-         locs []]
-    (let [new-locs (if (pred (zip/node loc))
-                     (conj locs loc)
-                     locs)
-          next-loc (zip/next loc)]
-      (if (zip/end? next-loc)
-        new-locs
-        (recur next-loc new-locs)))))
-
-
-(defn chain->
-  [zipper preds]
-  ;; we're here because (count preds) is more than 1
-  (loop [locs [zipper]
-         preds preds]
+#_
+(defn chain->loc-pred
+  [chain]
+  (loop [preds chain
+         loc-pred true]
+    (println "preds:" preds "loc-pred:" loc-pred)
     (let [[first-pred second-pred & rest-preds] preds
-          [target-fn next-pred rest-preds] (if (= :> second-pred)
-                                             [children (first rest-preds) (rest rest-preds)]
-                                             [#(rest (descendants %)) second-pred rest-preds])
+          _ (println "first-pred:" first-pred)
+          _ (println "second-pred:" second-pred)
+          _ (println "rest-preds:" rest-preds)
+          [new-pred rest-preds] (condp = second-pred
+                                  :> ;;:
+                                  [[:parent-is? [:and first-pred loc-pred]]
+                                   rest-preds]
+                                  nil ;;:
+                                  [[:and first-pred loc-pred]
+                                   nil]
+                                  ;; else:
+                                  [[:ancestor-is? [:and first-pred loc-pred]]
+                                   (concat [second-pred] rest-preds)])]
+      (println "new-pred:" new-pred)
+      (println "rest-preds:" rest-preds)
+      (if (and (> (count rest-preds) 0)
+               (some? (first rest-preds)))
+        (recur rest-preds
+               new-pred)
+        new-pred))))
 
-          parents (mapcat #(zip-filter first-pred %) locs)
-          targets (mapcat target-fn parents)
-          filtered (filter (pred->loc-pred next-pred) targets)]
-      (println "parents:" (map zip/node parents))
-      (println "targets:" (map zip/node targets))
-      (println "filtered:" (map zip/node filtered))
-      (if (pos? (count rest-preds))
-        (recur filtered rest-preds)
-        (set filtered)))))
+
+(defn chain->loc-pred
+  [chain]
+  (loop [preds chain
+         loc-pred (constantly true)]
+    (let [[first-pred second-pred & rest-preds] preds
+          [new-pred rest-preds] (condp = second-pred
+                                  :> ;;:
+                                  [(parent-node-is? (and first-pred loc-pred))
+                                   rest-preds]
+                                  nil ;;:
+                                  [(fn [loc] (and ((my-node-is? first-pred) loc)
+                                                  (loc-pred loc)))
+                                   nil]
+                                  ;; else:
+                                  [(ancestor-node-is? (and first-pred loc-pred))
+                                   (concat [second-pred] rest-preds)])]
+      (if (and (> (count rest-preds) 0)
+               (some? (first rest-preds)))
+        (recur rest-preds
+               new-pred)
+        new-pred))))
 
 
 (defn loc-visitor
+  "Like tree-visitor but tests a predicate on locs, not nodes.
+  Runs the transformer f on the nodes of locs that satisfy the predicate."
   [zipper loc-pred f]
   (loop [loc zipper]
+    (println "l-v: loc:" (zip/node loc))
     (let [new-loc (if (loc-pred loc)
+                    (do
+                    (println "MATCHES")
                     (let [new-node (f (zip/node loc))]
                       (println "new-node:" new-node)
-                      (zip/replace loc new-node))
-                    loc)
+                      (zip/replace loc new-node)))
+                    (do
+                      (println "LOC:" loc)
+                      (println "NOT A MATCH")
+                    loc))
           next-loc (zip/next new-loc)]
       (if (zip/end? next-loc)
-        (zip/root new-loc)
+        {:node (zip/root new-loc)}
         (recur next-loc)))))
 
 
@@ -385,28 +381,19 @@
   [template steps f]
   (let [zipper (node-zip template)]
     (if (= 1 (count steps))
+      ;; in each case we pass a single predicate and a single transformer f:
       (tree-visitor zipper (vec (concat (map step->node-visitor steps) [f])))
-      ;; otherwise preds is a chain
-      (let [targets (chain-> zipper steps)
-            _ (println "Targets:" targets)
-            loc-pred #(some targets %)]
-        ;; now we have to run f on targets
+      ;; otherwise steps is a chain:
+      (let [loc-pred (chain->loc-pred steps)]
         (loc-visitor zipper loc-pred (fn [node] (:node (f node :dummy))))))))
-
-
-
 ;;
 ;; Tree traversal ;;;;;;;;
 
 
 
-
-
-
-
 (defn parse-pair
   [steps f]
-  #(transform-nodes % (mapv step->pred steps) f))
+  #(transform-nodes % (mapv step->node-pred steps) f))
 
 
 (defn template ;; compare kioo/common.cljx do->
