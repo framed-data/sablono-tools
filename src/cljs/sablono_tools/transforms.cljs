@@ -124,7 +124,7 @@
 
 ;; Transformations ;;;;;;;
 ;;
-;; A transformation is a visitor (i.e. a function of node and state)
+;; A transformation is a visitor: a function of the node
 ;; that returns a map with a :node property representing the
 ;; replacement value for the current node.
 ;;
@@ -138,7 +138,7 @@
 
 (defn set-attr
   [& kvs]
-  (fn [node state]
+  (fn [node]
     {:node ((apply set-attr' kvs) node)}))
 
 
@@ -151,7 +151,7 @@
 
 (defn remove-attr
   [& attr-names]
-  (fn [node state]
+  (fn [node]
     {:node ((apply remove-attr' attr-names) node)}))
 
 
@@ -163,7 +163,7 @@
 (defn content
   "Replaces the content of the node."
   [& values]
-  (fn [node state]
+  (fn [node]
     {:node ((apply content' values) node)}))
 
 
@@ -197,7 +197,7 @@
   ([m] (replace-vars #"\$\{\s*([^}]*[^\s}])\s*}" m))
   ([re m] (replace-vars re m keyword))
   ([re m f]
-   (fn [node state]
+   (fn [node]
      {:node ((replace-vars' re m f) node)})))
 ;;
 ;; Transformations ;;;;;;;
@@ -240,7 +240,7 @@
   if the predicate is not satisfied."
   [step]
   (let [f (step->node-pred step)]
-    (fn [node state]
+    (fn [node]
       {:next (not (f node))})))
 
 
@@ -264,48 +264,39 @@
 
 ;; Tree traversal ;;;;;;;;
 ;;
-;; A visitor is a function of [node state] that returns a map which may contain:
+;; A visitor is a function of node that returns a map which may contain:
 ;; :node replacing the current :node
-;; :state replacing the current :state
 ;; :next indicating an instruction to skip the rest of the visitors at this :node
 ;; :stop indicating an instruction to stop processing the tree.
-
-;; (We're only using :node and :next of this api so we will probably simplify it.)
 ;;
 (defn visit-node
-  [start-node start-state visitors]
+  [start-node visitors]
   (loop [node start-node
-         state start-state
          [first-visitor & rest-visitors] visitors]
-    (let [new-context (first-visitor node state)
-          context (merge {:node node, :state state, :stop false, :next false}
+    (let [new-context (first-visitor node)
+          context (merge {:node node, :stop false, :next false}
                          new-context)
           {new-node :node
-           new-state :state
            :keys (stop next)} context]
       (if (or next stop (nil? rest-visitors))
-        (let [return-value {:node new-node, :state new-state, :stop stop}]
+        (let [return-value {:node new-node, :stop stop}]
           return-value)
-        (recur new-node new-state rest-visitors)))))
+        (recur new-node rest-visitors)))))
 
 
 (defn tree-visitor
   ([zipper visitors]
-     (tree-visitor zipper nil visitors))
-  ([zipper initial-state visitors]
-     (loop [loc zipper
-            state initial-state]
-       (let [context (visit-node (zip/node loc) state visitors)
+     (loop [loc zipper]
+       (let [context (visit-node (zip/node loc) visitors)
              new-node (:node context)
-             new-state (:state context)
              stop (:stop context)
              new-loc (if (= new-node (zip/node loc))
                        loc
                        (zip/replace loc new-node))
              next-loc (zip/next new-loc)]
          (if (or (zip/end? next-loc) (= stop true))
-           {:node (zip/root new-loc) :state new-state}
-           (recur next-loc new-state))))))
+           {:node (zip/root new-loc)}
+           (recur next-loc))))))
 
 
 (defn chain->loc-pred
