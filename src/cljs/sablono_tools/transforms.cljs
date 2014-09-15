@@ -1,40 +1,5 @@
 (ns sablono-tools.transforms
-  (:refer-clojure :exclude [descendants ancestors])
   (:require [clojure.zip :as zip]))
-
-;; based on enlive-html but using the sablono template format rather than html:
-;; [tag attrs? content*]
-
-
-;; Here are three functions stolen from clojure.data.zip:
-;;
-(defn right-locs
-  "Returns a lazy sequence of locations to the right of loc, starting with loc."
-  [loc]
-  (lazy-seq (when loc (cons loc (right-locs (zip/right loc))))))
-
-(defn children
-  "Returns a lazy sequence of all immediate children of location loc,
-  left-to-right."
-  [loc]
-  (println "children: loc:" (zip/node loc))
-  (when (zip/branch? loc)
-    (println "children: down:" (zip/node (zip/down loc)))
-    (println "children: right:" (map zip/node (right-locs (zip/down loc))))
-    (let [val (right-locs (zip/down loc))]
-      (println "children: children:" (map zip/node val))
-      val)))
-
-(defn descendants
-  "Returns a lazy sequence of all descendants of location loc, in
-  depth-first order, left-to-right, starting with loc. Yes, INCLUDING loc.
-  That's needed to make the recursion work. You can trim it off afterward
-  if you want."
-  [loc]
-  (lazy-seq (cons loc (mapcat descendants (children loc)))))
-;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 
 ;; Node accessors ;;;;;;;;
@@ -51,22 +16,26 @@
        (first node)
        (= (first node) tag)))
 
+(defn has-attrs?
+  [node]
+  (and (sequential? node)
+       (second node)
+       (map? (second node))))
+
 
 (defn attrs
   "Get the attrs of a node."
   [node]
-  (when (and (sequential? node)
-             (second node)
-             (map? (second node)))
-    (second node)))
+  (if (has-attrs? node)
+    (second node)
+    {}))
 
 (defn attr?
   "Does the node have the specified attr?"
   [kw]
   (fn [node]
     (let [attrs (attrs node)]
-      (and attrs
-           (get attrs kw)))))
+      (get attrs kw))))
 
 
 (defn id=
@@ -74,6 +43,12 @@
   (let [attrs (attrs node)]
     (and (some? attrs)
          (= (:id attrs) id))))
+
+(defn body
+  [node]
+  (if (has-attrs? node)
+      (rest (rest node))
+      (rest node)))
 ;;
 ;; Node accessors ;;;;;;;;
 
@@ -106,12 +81,22 @@
     (reduce (fn [acc pred] (and acc (pred node)))
             true
             preds)))
+
+(defn disjunction
+  [& preds]
+  (fn [node]
+    (reduce (fn [acc pred] (or acc (pred node)))
+            false
+            preds)))
 ;;
-;; Predicates ;;;;;;;;;;;;
+;; Node Predicates ;;;;;;;;;;;;
+
+
 
 ;; Loc Predicates ;;;;;;;;
 ;;
-;; loc -> Bool
+;; A loc predicate is a Boolean function of a loc.
+;;
 
 (defn parent-node-is?
   "Does loc's parent's node satisfy node-pred?"
@@ -125,8 +110,6 @@
   "Does some ancestor node of loc satisfy node-pred?"
   [node-pred]
   (fn [loc]
-    (println "LOC:" loc)
-    (println "PATH:" (zip/path loc))
     (some node-pred (zip/path loc))))
 
 (defn my-node-is?
@@ -141,14 +124,41 @@
 
 ;; Transformations ;;;;;;;
 ;;
-;; A transformation is a visitor that returns a map with a
-;; :node property representing the replacement value for the current node.
+;; A transformation is a visitor (i.e. a function of node and state)
+;; that returns a map with a :node property representing the
+;; replacement value for the current node.
 ;;
+(defn set-attr'
+  "Assocs attributes on the node."
+  [& kvs]
+  (fn [node]
+    (let [attrs (attrs node)
+          new-attrs (apply assoc attrs kvs)]
+      (vec (concat [(tag node) new-attrs] (body node))))))
+
+(defn set-attr
+  [& kvs]
+  (fn [node state]
+    {:node ((apply set-attr' kvs) node)}))
+
+
+(defn remove-attr'
+  [& attr-names]
+  (fn [node]
+    (let [attrs (attrs node)
+          new-attrs (apply dissoc attrs attr-names)]
+      (vec (concat [(tag node) new-attrs] (body node))))))
+
+(defn remove-attr
+  [& attr-names]
+  (fn [node state]
+    {:node ((apply remove-attr' attr-names) node)}))
+
+
 (defn content'
   [& values]
   (fn [node]
     (vec (concat [(tag node) (attrs node)] values))))
-
 
 (defn content
   "Replaces the content of the node."
@@ -197,22 +207,25 @@
 (defn step->node-pred
   "Convert step into a single predicate Node -> Bool.
   A step may be:
-  an explicit predicate function,
+  an explicit node predicate function,
   a keyword such as :div (matching nodes with that tag),
   a keyword whose name begins with a # such as :#foo
   (matching nodes with the id 'foo'),
-  a vector of any of the above
-  (representing the conjunction of the enclosed predicates),
+  a vector or a set of any of the above
+  (representing the conjunction or disjunction of the enclosed predicates),
   or the special form :> (representing direct children of the preceding step)."
   [step]
   (cond
    (vector? step) (apply conjunction (map step->node-pred step))
+   (set? step) (apply disjunction (map step->node-pred step))
    ;; a keyword is also an IFn so check keyword? first:
    (keyword? step) (let [name (name step)]
                          (if-let [v (re-find #"\#(.+)" name)] ; does tag start with a #
-                           (let [id (second v)] ; yes: id matcher
+                           ; yes: id matcher
+                           (let [id (second v)]
                              (id-matcher id))
-                           (let [tag step] ; no: tag matcher or special form
+                           ; no: tag matcher or special form
+                           (let [tag step]
                              (if (= :> tag)
                                tag
                                (tag-matcher tag)))))
@@ -256,30 +269,22 @@
 ;; :state replacing the current :state
 ;; :next indicating an instruction to skip the rest of the visitors at this :node
 ;; :stop indicating an instruction to stop processing the tree.
+
+;; (We're only using :node and :next of this api so we will probably simplify it.)
 ;;
 (defn visit-node
   [start-node start-state visitors]
-  (println "Visiting:" start-node)
   (loop [node start-node
          state start-state
          [first-visitor & rest-visitors] visitors]
-    (println "node:" node)
-    (println "state:" state)
-    (println "first-visitor:" first-visitor)
     (let [new-context (first-visitor node state)
-          _ (println "new-context:" new-context)
-
-
           context (merge {:node node, :state state, :stop false, :next false}
                          new-context)
-          _ (println "context:" context)
           {new-node :node
            new-state :state
            :keys (stop next)} context]
-      (println "next:" next)
       (if (or next stop (nil? rest-visitors))
         (let [return-value {:node new-node, :state new-state, :stop stop}]
-          (println "returning:" return-value)
           return-value)
         (recur new-node new-state rest-visitors)))))
 
@@ -303,8 +308,33 @@
            (recur next-loc new-state))))))
 
 
+(defn chain->loc-pred
+  "Convert a chain into a single loc predicate."
+  [chain]
+  (loop [preds chain
+         loc-pred (constantly true)]
+    (let [[first-pred second-pred & rest-preds] preds
+          [new-pred rest-preds] (condp = second-pred
+                                  :> ;=>
+                                  [(parent-node-is? (and first-pred loc-pred))
+                                   rest-preds]
+                                  nil ;=>
+                                  [(fn [loc] (and ((my-node-is? first-pred) loc)
+                                                  (loc-pred loc)))
+                                   nil]
+                                  ;; else:
+                                  [(ancestor-node-is? (and first-pred loc-pred))
+                                   (concat [second-pred] rest-preds)])]
+      (if (and (> (count rest-preds) 0)
+               (some? (first rest-preds)))
+        (recur rest-preds
+               new-pred)
+        new-pred))))
+
 #_
 (defn chain->loc-pred
+  "A version of chain->loc-pred that returns plain data structures
+  for testing at the repl."
   [chain]
   (loop [preds chain
          loc-pred true]
@@ -332,45 +362,15 @@
         new-pred))))
 
 
-(defn chain->loc-pred
-  [chain]
-  (loop [preds chain
-         loc-pred (constantly true)]
-    (let [[first-pred second-pred & rest-preds] preds
-          [new-pred rest-preds] (condp = second-pred
-                                  :> ;;:
-                                  [(parent-node-is? (and first-pred loc-pred))
-                                   rest-preds]
-                                  nil ;;:
-                                  [(fn [loc] (and ((my-node-is? first-pred) loc)
-                                                  (loc-pred loc)))
-                                   nil]
-                                  ;; else:
-                                  [(ancestor-node-is? (and first-pred loc-pred))
-                                   (concat [second-pred] rest-preds)])]
-      (if (and (> (count rest-preds) 0)
-               (some? (first rest-preds)))
-        (recur rest-preds
-               new-pred)
-        new-pred))))
-
-
 (defn loc-visitor
   "Like tree-visitor but tests a predicate on locs, not nodes.
   Runs the transformer f on the nodes of locs that satisfy the predicate."
   [zipper loc-pred f]
   (loop [loc zipper]
-    (println "l-v: loc:" (zip/node loc))
     (let [new-loc (if (loc-pred loc)
-                    (do
-                    (println "MATCHES")
                     (let [new-node (f (zip/node loc))]
-                      (println "new-node:" new-node)
-                      (zip/replace loc new-node)))
-                    (do
-                      (println "LOC:" loc)
-                      (println "NOT A MATCH")
-                    loc))
+                      (zip/replace loc new-node))
+                    loc)
           next-loc (zip/next new-loc)]
       (if (zip/end? next-loc)
         {:node (zip/root new-loc)}
@@ -381,9 +381,15 @@
   [template steps f]
   (let [zipper (node-zip template)]
     (if (= 1 (count steps))
-      ;; in each case we pass a single predicate and a single transformer f:
+
+      ;; convert the single step to a node visitor;
+      ;; pass it and the transformer f to a tree-visitor:
       (tree-visitor zipper (vec (concat (map step->node-visitor steps) [f])))
-      ;; otherwise steps is a chain:
+
+      ;; otherwise steps is a chain, a sequence of selector steps that
+      ;; depends on relationships among nodes. Convert it to a loc predicate,
+      ;; convert the transformer back to a function of just the node,
+      ;; and pass those to a loc-visitor:
       (let [loc-pred (chain->loc-pred steps)]
         (loc-visitor zipper loc-pred (fn [node] (:node (f node :dummy))))))))
 ;;
