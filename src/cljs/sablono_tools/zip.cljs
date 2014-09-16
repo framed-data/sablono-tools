@@ -154,7 +154,7 @@
   [zipper loc-pred f]
   (loop [loc zipper]
     (let [new-loc (if (loc-pred loc)
-                    (let [new-node (f (z/node loc))]
+                    (let [new-node (:node (f (z/node loc)))]
                       (z/replace loc new-node))
                     loc)
           next-loc (z/next new-loc)]

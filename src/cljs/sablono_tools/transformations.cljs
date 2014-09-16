@@ -3,15 +3,25 @@
             [sablono.util :as util]))
 
 
-;; A transformation is a visitor function of the node
+;; A transformation is a visitor function of a node
 ;; that returns a map with a :node property representing the
-;; replacement value for the current node.
+;; replacement value for the node.
 
-(defn visitor
+
+
+(defn- make-node
+  [tag attrs body]
+  ;; Omit attrs if it is empty or nil:
+  (if (and (some? attrs) (seq attrs))
+    (vec (concat [tag attrs] body))
+    (vec (concat [tag] body))))
+
+(defn- visitor
   [f]
   (fn [& args]
     (fn [node]
       {:node ((apply f args) node)})))
+
 
 (defn set-attr'
   "Assocs attributes on the node."
@@ -19,7 +29,7 @@
   (fn [node]
     (let [attrs (node/attrs node)
           new-attrs (apply assoc attrs kvs)]
-      (vec (concat [(node/tag node) new-attrs] (node/body node))))))
+      (make-node (node/tag node) new-attrs (node/body node)))))
 
 (def set-attr (visitor set-attr'))
 
@@ -29,7 +39,7 @@
   (fn [node]
     (let [attrs (node/attrs node)
           new-attrs (apply dissoc attrs attr-names)]
-      (vec (concat [(node/tag node) new-attrs] (node/body node))))))
+      (make-node (node/tag node) new-attrs (node/body node)))))
 
 (def remove-attr (visitor remove-attr'))
 
@@ -41,7 +51,7 @@
           orig-classes (set (clojure.string/split " " (:class attrs)))
           new-classes (apply conj orig-classes classes)
           new-attrs (merge attrs {:class (util/join-classes new-classes)})]
-      (vec (concat [(node/tag node) new-attrs] (node/body node))))))
+      (make-node (node/tag node) new-attrs (node/body node)))))
 
 (def add-class (visitor add-class'))
 
@@ -50,7 +60,7 @@
   "Replaces the content of the node."
   [& values]
   (fn [node]
-    (vec (concat [(node/tag node) (node/attrs node)] values))))
+    (make-node (node/tag node) (node/attrs node) values)))
 
 (def content (visitor content'))
 

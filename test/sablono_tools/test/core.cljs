@@ -1,9 +1,12 @@
-(ns sablono-tools.core
+(ns sablono-tools.test.core
   (:require-macros [cemerick.cljs.test :refer (is deftest with-test run-tests testing test-var)])
   (:require [cemerick.cljs.test :as t] ;; cemerick.cljs.test must be required even if not explicitly used
             [clojure.zip :as zip]
-            [sablono-tools.transforms :refer [id-matcher tag-matcher conjunction disjunction
-                                              attr? replace-vars content any-node template]]))
+            [sablono-tools.node-accessors :refer [attr?]]
+            [sablono-tools.node-predicates :refer [any-node id-matcher tag-matcher
+                                                   conjunction disjunction]]
+            [sablono-tools.transformations :refer [replace-vars content]]
+            [sablono-tools.core :refer [template]]))
 
 
 (deftest conjunction-test
@@ -31,17 +34,13 @@
     (is (= (d node4) false))))
 
 
-;; We don't require an explicit {} for a node's empty attributes on input
-;; but we do insert it on output.
-
-
 (deftest p-test
   (let [source [:div
                 [:p {:lang "EN"}]]
 
         forms [[:p] (content "Hello")]
 
-        expected [:div {}
+        expected [:div
                   [:p {:lang "EN"} "Hello"]]]
     (is (= (template source forms) expected)
         "p-test failed")))
@@ -53,7 +52,7 @@
 
         forms [[(attr? :lang)] (content "Hello")]
 
-        expected [:div {}
+        expected [:div
                   [:p {:lang "EN"} "Hello"]]]
     (is (= (template source forms) expected)
         "fn-test failed")))
@@ -68,7 +67,7 @@
 
         forms [[[:p (attr? :lang)]] (content "Hello")]
 
-        expected [:div {}
+        expected [:div
                   [:p {:lang "EN"} "Hello"]]]
     (is (= (template source forms) expected)
         "and-test failed")))
@@ -86,10 +85,10 @@
 
         forms [[#{:p (attr? :lang)}] (content "Hello")]
 
-        expected [:div {}
+        expected [:div
                   [:p {:lang "EN"} "Hello"]
                   [:section {:lang "FR"} "Hello"]
-                  [:p {} "Hello"]
+                  [:p "Hello"]
                   [:section {:no-lang "Not Me"}]]]
     (is (= (template source forms) expected)
         "or-test failed")))
@@ -102,9 +101,9 @@
 
         forms [[:p] (content "New Text")]
 
-        expected [:div {}
-                  [:p {} "New Text"]
-                  [:p {} "New Text"]]]
+        expected [:div
+                  [:p "New Text"]
+                  [:p "New Text"]]]
 
     (is (= (template source forms) expected)
         "tag-and-content replacement failed")))
@@ -117,7 +116,7 @@
 
         forms [[:#noonie] (content "foo")]
 
-        expected [:html {}
+        expected [:html
                   [:div {:id "noonie"} "foo"]
                   [:div {:id "nunie"} "Not Me"]]]
 
@@ -136,8 +135,8 @@
 
         forms [[any-node] (replace-vars vars)]
 
-        expected [:div {}
-                  [:div {} "Tipping Points 2014-01-01"
+        expected [:div
+                  [:div "Tipping Points 2014-01-01"
                    [:a {:href "http://example.com/model-predictions.csv"} "Click here"]]]]
 
     (is (= (template source forms) expected)
@@ -155,7 +154,7 @@
 
         forms [[:p (attr? :lang)] (content "SVP!")]
 
-        expected [:div {}
+        expected [:div
                   [:p {:id "french"}
                    [:a {:href "http://link.com" :lang "FR"} "SVP!"]]]]
     (is (= (template source forms) expected)
@@ -174,12 +173,57 @@
         forms [[:p :> any-node] (replace-vars vars)]
 
         ;; Both the text node and the :a node are direct children of a :p node
-        expected [:div {}
-                  [:p {} "Tipping Points 2014-01-01"
+        expected [:div
+                  [:p "Tipping Points 2014-01-01"
                    [:a {:href "http://example.com/model-predictions.csv"} "Click here"]]]]
 
     (is (= (template source forms) expected)
         "children replace-vars failed")))
+
+
+(deftest multi-test
+  "test with more than one selector-transformer pair"
+  (let [source [:section
+                [:header
+                 [:h3
+                  [:i {:class "fa fa-table"}] "Tipping Points ${report-date}"]]
+                [:table
+                 [:thead
+                  [:tr {:id "feature-summary-head"}
+                   [:th "Feature"]
+                   [:th {:col-span 5} "Non-retained Percentiles"]
+                   [:th {:col-span 5} "Retained Percentiles"]]
+                  [:tr
+                   [:th ]
+                   [:th "Min"]
+                   [:th "25"]
+                   [:th "50"]
+                   [:th "75"]
+                   [:th "Max"]
+                   [:th "Min"]
+                   [:th "25"]
+                   [:th "50"]
+                   [:th "75"]
+                   [:th "Max"]]]
+                 [:tbody {:id "feature-summary-body"}]]]
+
+        vars {:n-days 7
+              :report-date "2014-01-01"
+              :report-id 12345
+              :model-predictions "http://example.com/model-predictions.csv"
+              :feature-ranking "http://example.com/feature-ranking.csv"
+              :feature-summary-body [[1 2 3 4 5 6 7 8 9 10]
+                                     [10 20 30 40 50 60 70 80 90 100]]}
+
+        forms [[:section any-node] (replace-vars vars)
+               [:#feature-summary-body] (let [td (fn [content] [:td content])
+                                              row (fn [cols] [:tr (map td cols)])]
+                                          (content (map row (:feature-summary-body vars))))]
+
+        expected [:section [:header [:h3 [:i {:class "fa fa-table"} nil] "Tipping Points 2014-01-01"]] [:table [:thead [:tr {:id "feature-summary-head"} [:th "Feature"] [:th {:col-span 5} "Non-retained Percentiles"] [:th {:col-span 5} "Retained Percentiles"]] [:tr [:th nil] [:th "Min"] [:th "25"] [:th "50"] [:th "75"] [:th "Max"] [:th "Min"] [:th "25"] [:th "50"] [:th "75"] [:th "Max"]]] [:tbody {:id "feature-summary-body"} '([:tr ([:td 1] [:td 2] [:td 3] [:td 4] [:td 5] [:td 6] [:td 7] [:td 8] [:td 9] [:td 10])] [:tr ([:td 10] [:td 20] [:td 30] [:td 40] [:td 50] [:td 60] [:td 70] [:td 80] [:td 90] [:td 100])])]]]]
+
+    (is (= (template source forms) expected)
+        "multi-test failed")))
 
 
 
