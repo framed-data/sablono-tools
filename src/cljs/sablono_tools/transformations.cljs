@@ -7,6 +7,11 @@
 ;; that returns a map with a :node property representing the
 ;; replacement value for the current node.
 
+(defn visitor
+  [f]
+  (fn [& args]
+    (fn [node]
+      {:node ((apply f args) node)})))
 
 (defn set-attr'
   "Assocs attributes on the node."
@@ -16,10 +21,7 @@
           new-attrs (apply assoc attrs kvs)]
       (vec (concat [(node/tag node) new-attrs] (node/body node))))))
 
-(defn set-attr
-  [& kvs]
-  (fn [node]
-    {:node ((apply set-attr' kvs) node)}))
+(def set-attr (visitor set-attr'))
 
 
 (defn remove-attr'
@@ -29,10 +31,7 @@
           new-attrs (apply dissoc attrs attr-names)]
       (vec (concat [(node/tag node) new-attrs] (node/body node))))))
 
-(defn remove-attr
-  [& attr-names]
-  (fn [node]
-    {:node ((apply remove-attr' attr-names) node)}))
+(def remove-attr (visitor remove-attr'))
 
 
 (defn add-class'
@@ -44,22 +43,16 @@
           new-attrs (merge attrs {:class (util/join-classes new-classes)})]
       (vec (concat [(node/tag node) new-attrs] (node/body node))))))
 
-(defn add-class
-  [& classes]
-  (fn [node]
-    {:node ((apply add-class' classes) node)}))
+(def add-class (visitor add-class'))
 
 
 (defn content'
+  "Replaces the content of the node."
   [& values]
   (fn [node]
     (vec (concat [(node/tag node) (node/attrs node)] values))))
 
-(defn content
-  "Replaces the content of the node."
-  [& values]
-  (fn [node]
-    {:node ((apply content' values) node)}))
+(def content (visitor content'))
 
 
 ;; REMINDER: this function uses the JS string.replace:
@@ -70,9 +63,10 @@
   If the node is a text node, then replacements occur directly in it.
   Otherwise replacements are done in the node's attrs.
   "
-  [& [re m f]]
-    (let [replacement (fn [match p1]
-                        (m (f p1)))
+  [m]
+    (let [re #"\$\{\s*([^}]*[^\s}])\s*}"
+          replacement (fn [match p1]
+                        (m (keyword p1)))
           substitute-vars (fn [x]
                             (cond
                              (string? x) (.replace x re replacement)
@@ -88,9 +82,4 @@
                             node))
          :else node))))
 
-(defn replace-vars
-  ([m] (replace-vars #"\$\{\s*([^}]*[^\s}])\s*}" m))
-  ([re m] (replace-vars re m keyword))
-  ([re m f]
-   (fn [node]
-     {:node ((replace-vars' re m f) node)})))
+(def replace-vars (visitor replace-vars'))
