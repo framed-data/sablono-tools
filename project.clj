@@ -13,23 +13,28 @@
 
   :profiles {:dev {:plugins [[com.cemerick/austin "0.1.5"]]}}
 
-  :cljsbuild {:builds [{:source-paths ["src/cljs" "test"]
+  :cljsbuild {:builds [{:id "whitespace"
+                        :source-paths ["src/cljs" "test"]
                         :compiler {:output-to "target/cljs/whitespace.js"
                                    :optimizations :whitespace
                                    :pretty-print true}}
-                       #_{:source-paths ["src/cljs" "test"]
+
+                       {:id "simple"
+                        :source-paths ["src/cljs" "test"]
                         :compiler {:output-to "target/cljs/simple.js"
                                    :optimizations :simple
                                    :pretty-print true}}
-                       #_{:source-paths ["src/cljs" "test"]
+                       {:id "advanced"
+                        :source-paths ["src/cljs" "test"]
                         :compiler {:output-to "target/cljs/advanced.js"
                                    :optimizations :advanced
+                                   :source-map "target/cljs/advanced.js.map"
+                                   :externs ["externs/react.js"]
                                    :pretty-print true}}]
 
               :test-commands {"phantom-whitespace" ["phantomjs" :runner
                                                     "target/cljs/whitespace.js"]
-                             ; "phantom-simple" ["phantomjs" :runner
-                             ;                   "target/cljs/simple.js"]
-                             ; "phantom-advanced" ["phantomjs" :runner
-                             ;                     "target/cljs/advanced.js"]
-                              }})
+                              "phantom-simple" ["phantomjs" :runner
+                                                "target/cljs/simple.js"]
+                              "phantom-advanced" ["phantomjs" :runner
+                                                  "target/cljs/advanced.js"]}})
