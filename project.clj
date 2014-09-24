@@ -24,6 +24,7 @@
                         :compiler {:output-to "target/cljs/simple.js"
                                    :optimizations :simple
                                    :pretty-print true}}
+
                        {:id "advanced"
                         :source-paths ["src/cljs" "test"]
                         :compiler {:output-to "target/cljs/advanced.js"

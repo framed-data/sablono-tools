@@ -84,7 +84,8 @@
            {:node (z/root new-loc)}
            (recur next-loc))))))
 
-  (defn step->node-visitor
+
+(defn step->node-visitor
   "Convert step into a visitor that returns a map with
   :next (skip succeeding visitors on the current node) set to true
   if the predicate is not satisfied."
