@@ -8,7 +8,6 @@
 ;; replacement value for the node.
 
 
-
 (defn- make-node
   [tag attrs body]
   ;; Omit attrs if it is empty or nil:
@@ -44,16 +43,30 @@
 (def remove-attr (visitor remove-attr'))
 
 
+(defn modify-classes
+  [add-or-remove & classes]
+  (let [f (condp = add-or-remove
+            :add conj
+            :remove disj)]
+    (fn [node]
+      (let [attrs (node/attrs node)
+            orig-classes (set (clojure.string/split " " (:class attrs)))
+            new-classes (apply f orig-classes classes)
+            new-attrs (merge attrs {:class (util/join-classes new-classes)})]
+        (make-node (node/tag node) new-attrs (node/body node))))))
+
 (defn add-class'
   [& classes]
-  (fn [node]
-    (let [attrs (node/attrs node)
-          orig-classes (set (clojure.string/split " " (:class attrs)))
-          new-classes (apply conj orig-classes classes)
-          new-attrs (merge attrs {:class (util/join-classes new-classes)})]
-      (make-node (node/tag node) new-attrs (node/body node)))))
+  (modify-classes :add classes))
 
 (def add-class (visitor add-class'))
+
+
+(defn remove-class'
+  [& classes]
+  (modify-classes :remove classes))
+
+(def remove-class (visitor remove-class'))
 
 
 (defn content'
@@ -70,7 +83,7 @@
   "Replace text strings with properties from the map m.
   If m has a property :something, then all occurrences of ${something}
   in the target will be replaced with m's value of :something.
-  If the node is a text node, then replacements occur directly in it.
+  If the node is a text node, then replacements occur directly in the text.
   Otherwise replacements are done in the node's attrs.
   "
   [m]

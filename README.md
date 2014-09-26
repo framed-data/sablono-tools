@@ -24,7 +24,7 @@ whose id is 'To-Do List'?".
 Only a subset of Enlive's selectors and transformations are currently supported;
 adding more should be straightforward.
 
-Note that we always write the selector within a vector,
+Note that we always write the entire selector within a vector,
 so `[:h1]` and `[[:p (attr? :lang)]]` each contain a single step,
 while `[:p (attr :lang)]` contains two steps and is therefore a chain.
 
@@ -61,6 +61,8 @@ A `:>` preceding any selector causes it to apply only to immediate children
 
 `add-class`
 
+`remove-class`
+
 `content`: replace the content with what follows, example: `(content "some text")
 
 `replace-vars`: replace any ${var} in text or attributes by the value found in the map,
@@ -73,8 +75,8 @@ Please see the [test cases](test/sablono-tools/core.cljs) for further examples.
 * No macros: `template` is a function, not a macro
 * Operates in the ClojureScript environment, not Clojure
 * Operates on Sablono templates, not html
-* User-defined selector must be simply a Boolean function of the node, not a state machine
-* Simpler, no compile phase
+* Selectors are simply Boolean functions of a node, not state machines
+* Simpler, no compilation phase
 * Undoubtedly slower
 
 

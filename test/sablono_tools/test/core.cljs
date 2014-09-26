@@ -5,7 +5,7 @@
             [sablono-tools.node-accessors :refer [attr?]]
             [sablono-tools.node-predicates :refer [any-node id-matcher tag-matcher
                                                    conjunction disjunction]]
-            [sablono-tools.transformations :refer [replace-vars content]]
+            [sablono-tools.transformations :refer [set-attr replace-vars content]]
             [sablono-tools.core :refer [template]]))
 
 
@@ -46,7 +46,7 @@
         "p-test failed")))
 
 
-(deftest fn-test
+(deftest fn-predicate-test
   (let [source [:div
                 [:p {:lang "EN"}]]
 
@@ -55,7 +55,7 @@
         expected [:div
                   [:p {:lang "EN"} "Hello"]]]
     (is (= (template source forms) expected)
-        "fn-test failed")))
+        "fn-predicate-test failed")))
 
 
 (deftest and-test
@@ -63,12 +63,16 @@
   This will match any element that is a :p AND has a 'lang' attribute.
   "
   (let [source [:div
-                [:p {:lang "EN"}]]
+                [:p {:lang "EN"}]
+                [:section {:lang "EN"} "Not a :p!"]
+                [:p {:no-lang "EN"} "I have no lang!"]]
 
         forms [[[:p (attr? :lang)]] (content "Hello")]
 
         expected [:div
-                  [:p {:lang "EN"} "Hello"]]]
+                  [:p {:lang "EN"} "Hello"]
+                  [:section {:lang "EN"} "Not a :p!"]
+                  [:p {:no-lang "EN"} "I have no lang!"]]]
     (is (= (template source forms) expected)
         "and-test failed")))
 
@@ -92,6 +96,17 @@
                   [:section {:no-lang "Not Me"}]]]
     (is (= (template source forms) expected)
         "or-test failed")))
+
+
+(deftest set-attr-test
+  (let [source [:div {:level :beginner}]
+
+        forms [[any-node] (set-attr :level :advanced :locale "zh-TW")]
+
+        expected [:div {:level :advanced :locale "zh-TW"}]]
+
+    (is (= (template source forms) expected)
+        "set-attr-test failed")))
 
 
 (deftest tag-and-content-test
@@ -150,22 +165,26 @@
   inside a :p element."
   (let [source [:div
                 [:p {:id "french"}
-                 [:a {:href "http://link.com" :lang "FR"} "Clique-bête"]]]
+                 [:a {:href "http://link.com" :lang "FR"} "Clique-bête"]]
+                [:section {:lang "EN"} "I'm not inside a :p!"]]
 
-        forms [[:p (attr? :lang)] (content "SVP!")]
+        forms [[:p (attr? :lang)] (content "Merci!")]
 
         expected [:div
                   [:p {:id "french"}
-                   [:a {:href "http://link.com" :lang "FR"} "SVP!"]]]]
+                   [:a {:href "http://link.com" :lang "FR"} "Merci!"]]
+                  [:section {:lang "EN"} "I'm not inside a :p!"]]]
     (is (= (template source forms) expected)
         "descendant-test failed")))
 
 
 (deftest any-node-children-replace-vars-test
-  "selector will select only immediate children of a :p"
+  "The chain with :> will select only immediate children of a :p"
   (let [source [:div
                 [:p "Tipping Points ${report-date}"
-                 [:a {:href "${model-predictions}"} "Click here"]]]
+                 [:a {:href "${model-predictions}"} "Click here"]
+                 [:ol
+                  [:li "${report-date} unchanged; I'm not an immediate child"]]]]
 
         vars {:report-date "2014-01-01"
               :model-predictions "http://example.com/model-predictions.csv"}
@@ -175,7 +194,9 @@
         ;; Both the text node and the :a node are direct children of a :p node
         expected [:div
                   [:p "Tipping Points 2014-01-01"
-                   [:a {:href "http://example.com/model-predictions.csv"} "Click here"]]]]
+                   [:a {:href "http://example.com/model-predictions.csv"} "Click here"]
+                   [:ol
+                    [:li "${report-date} unchanged; I'm not an immediate child"]]]]]
 
     (is (= (template source forms) expected)
         "children replace-vars failed")))
@@ -220,7 +241,51 @@
                                               row (fn [cols] [:tr (map td cols)])]
                                           (content (map row (:feature-summary-body vars))))]
 
-        expected [:section [:header [:h3 [:i {:class "fa fa-table"} nil] "Tipping Points 2014-01-01"]] [:table [:thead [:tr {:id "feature-summary-head"} [:th "Feature"] [:th {:col-span 5} "Non-retained Percentiles"] [:th {:col-span 5} "Retained Percentiles"]] [:tr [:th nil] [:th "Min"] [:th "25"] [:th "50"] [:th "75"] [:th "Max"] [:th "Min"] [:th "25"] [:th "50"] [:th "75"] [:th "Max"]]] [:tbody {:id "feature-summary-body"} '([:tr ([:td 1] [:td 2] [:td 3] [:td 4] [:td 5] [:td 6] [:td 7] [:td 8] [:td 9] [:td 10])] [:tr ([:td 10] [:td 20] [:td 30] [:td 40] [:td 50] [:td 60] [:td 70] [:td 80] [:td 90] [:td 100])])]]]]
+        expected [:section
+                  [:header
+                   [:h3
+                    [:i {:class "fa fa-table"}] "Tipping Points 2014-01-01"]]
+                  [:table
+                   [:thead
+                    [:tr {:id "feature-summary-head"}
+                     [:th "Feature"]
+                     [:th {:col-span 5} "Non-retained Percentiles"]
+                     [:th {:col-span 5} "Retained Percentiles"]]
+                    [:tr
+                     [:th]
+                     [:th "Min"]
+                     [:th "25"]
+                     [:th "50"]
+                     [:th "75"]
+                     [:th "Max"]
+                     [:th "Min"]
+                     [:th "25"]
+                     [:th "50"]
+                     [:th "75"]
+                     [:th "Max"]]]
+                   [:tbody {:id "feature-summary-body"}
+                    '([:tr
+                       ([:td 1]
+                        [:td 2]
+                        [:td 3]
+                        [:td 4]
+                        [:td 5]
+                        [:td 6]
+                        [:td 7]
+                        [:td 8]
+                        [:td 9]
+                        [:td 10])]
+                      [:tr
+                       ([:td 10]
+                        [:td 20]
+                        [:td 30]
+                        [:td 40]
+                        [:td 50]
+                        [:td 60]
+                        [:td 70]
+                        [:td 80]
+                        [:td 90]
+                        [:td 100])])]]]]
 
     (is (= (template source forms) expected)
         "multi-test failed")))

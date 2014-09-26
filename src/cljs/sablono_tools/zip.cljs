@@ -3,11 +3,11 @@
             [sablono-tools.node-predicates :as pred]
             [sablono-tools.transformations :as tr]))
 
+
 ;; Loc Predicates ;;;;;;;;
 ;;
 ;; A loc predicate is a Boolean function of a loc.
 ;;
-
 (defn parent-node-is?
   "Does loc's parent's node satisfy node-pred?"
   [node-pred]
@@ -35,14 +35,20 @@
   "A zipper that regards only vectors (ordinary nodes) and strings
   (text nodes) as nodes, not maps (attrs of nodes)."
   [root]
-  (z/zipper vector?
-              #(filter (fn [x] (or (vector? x) (string? x))) (seq %))
-              (fn [node children]
-                (with-meta
-                (let [f (apply tr/content children)]
-                  (get (f node true) :node))
-                  (meta node)))
-              root))
+  (let [branch? vector?
+
+        children (fn [node]
+                   (let [c (filter (fn [x] (or (vector? x) (string? x))) (seq node))]
+                     (if (empty? c)
+                       nil
+                       c)))
+
+        make-node (fn [node children]
+                    (with-meta
+                      (get ((apply tr/content children) node true) :node)
+                      (meta node)))]
+
+    (z/zipper branch? children make-node root)))
 
 
 ;; Visitors copped from Alex Miller's article:
@@ -54,6 +60,7 @@
 ;; :node replacing the current :node
 ;; :next indicating an instruction to skip the rest of the visitors at this :node
 ;; :stop indicating an instruction to stop processing the tree.
+;; (We're not making use of the :stop feature.)
 ;;
 (defn visit-node
   [start-node visitors]
@@ -103,14 +110,14 @@
     (let [[first-pred second-pred & rest-preds] preds
           [new-pred rest-preds] (condp = second-pred
                                   :> ;=>
-                                  [(parent-node-is? (and first-pred loc-pred))
+                                  [(parent-node-is? (pred/conjunction first-pred loc-pred))
                                    rest-preds]
                                   nil ;=>
                                   [(fn [loc] (and ((my-node-is? first-pred) loc)
                                                   (loc-pred loc)))
                                    nil]
                                   ;; else:
-                                  [(ancestor-node-is? (and first-pred loc-pred))
+                                  [(ancestor-node-is? (pred/conjunction first-pred loc-pred))
                                    (concat [second-pred] rest-preds)])]
       (if (and (> (count rest-preds) 0)
                (some? (first rest-preds)))

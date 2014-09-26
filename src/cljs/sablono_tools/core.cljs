@@ -6,6 +6,7 @@
 (defn transform-nodes
   [template steps f]
   (let [zipper (zip/node-zip template)]
+
     (if (= 1 (count steps))
       ;; convert the single step to a node visitor;
       ;; pass it and the transformer f to a tree-visitor:
@@ -16,7 +17,6 @@
       ;; and pass it and the transformer to a loc-visitor:
       (let [loc-pred (zip/chain->loc-pred steps)]
         (zip/loc-visitor zipper loc-pred f)))))
-
 
 
 (defn parse-pair
