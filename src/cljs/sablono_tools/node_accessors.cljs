@@ -1,7 +1,7 @@
 (ns sablono-tools.node-accessors)
 
 
-(defn tag
+(defn- tag
   "Get the tag of a node."
   [node]
   (node 0))
@@ -13,14 +13,14 @@
        (first node)
        (= (first node) tag)))
 
-(defn has-attrs?
+(defn- has-attrs?
   [node]
   (and (sequential? node)
        (second node)
        (map? (second node))))
 
 
-(defn attrs
+(defn- attrs
   "Get the attrs of a node."
   [node]
   (if (has-attrs? node)
@@ -34,6 +34,12 @@
     (let [attrs (attrs node)]
       (get attrs kw))))
 
+(defn attr=
+  "Does the node's k attr have the value v?"
+  [k v]
+  (fn [node]
+    (= ((attr? k) node) v)))
+
 
 (defn id=
   [node id]
@@ -41,7 +47,7 @@
     (and (some? attrs)
          (= (:id attrs) id))))
 
-(defn body
+(defn- body
   [node]
   (if (has-attrs? node)
       (rest (rest node))
