@@ -69,7 +69,7 @@ several selectors with the special form `:>` betwwen them, example: `[:p :> (att
 `replace-vars`: replace any ${var} in text or attributes by the value found in the map,
 example: `(replace-vars {:name "User" :group "Client"})`
 
-Please see the [test cases](test/sablono-tools/test/core.cljs) for further examples.
+Please see the [test cases](test/sablono_tools/test/core.cljs) for further examples.
 
 ## Differences from Enlive
 
@@ -90,4 +90,3 @@ You can run the tests as follows:
 $ `lein cljsbuild test`
 
 You must have phantomjs installed.
-
