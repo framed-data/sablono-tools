@@ -155,13 +155,13 @@
 
 (deftest id-and-content-test
   (let [source [:html
-                [:div {:id "noonie"} "Replace Me}"]
+                [:div {:id "noonie"} "Replace Me"]
                 [:div {:id "nunie"} "Not Me"]]
 
-        forms [[:#noonie] (content "foo")]
+        forms [[:#noonie] (content "Is That You?")]
 
         expected [:html
-                  [:div {:id "noonie"} "foo"]
+                  [:div {:id "noonie"} "Is That You?"]
                   [:div {:id "nunie"} "Not Me"]]]
 
     (is (= (template source forms) expected)
@@ -232,7 +232,8 @@
 
 
 (deftest multi-test
-  "test with more than one selector-transformer pair"
+  "Test with more than one selector-transformer pair.
+  (The nested lists in the output will be flattened by the html macro.)"
   (let [source [:section
                 [:header
                  [:h3
