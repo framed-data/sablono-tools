@@ -34,6 +34,10 @@ tag selector as `:tag`, example: `[:h1]` selects all elements whose tags are h1
 
 id selector as `:#id`, example: `[:#apple]` selects the element whose id is "apple"
 
+`attr?`, example `[(attr? :locale)]` selects all elements that have a :locale attribute
+
+`attr=`, example `[(attr= :lang "FR")]` selects all elements whose :lang attribute is "FR"
+
 `any-node`, universal selector, example: `[any-node]` selects all nodes
 
 AND selector as a vector of selectors, example: `[[:p (attr? :lang)]]`
@@ -48,20 +52,17 @@ several selectors, example: `[:p (attr? :lang)]` selects all elements that have 
 `lang` attribute and are descendants of a :p node. Each selector applies to descendants
 of nodes matching the preceding selector.
 
-several selectors with the special form `:>`, example: `[:p :> (attr? :lang)]` selects all
-elements that have a `lang` attribute and are immediate children of a :p node.
-A `:>` preceding any selector causes it to apply only to immediate children
-(rather than any descendant) of nodes matching the preceding selector.
+several selectors with the special form `:>` betwwen them, example: `[:p :> (attr? :lang)]` selects all elements that have a `lang` attribute and are immediate children of a :p node. A `:>` preceding any selector causes it to apply only to immediate children (rather than any descendant) of nodes matching the preceding selector.
 
 ## Transformations
 
-`set-attr`
+`set-attr`, example `(set-attr :level "advanced" :locale "zh-TW")` sets the :level attribute to "advanced" and the :locale attribute to "zh-TW"
 
-`remove-attr`
+`remove-attr`, example `(remove-attr :status)` removes the :status attribute
 
-`add-class`
+`add-class`, example `(add-class "c" "d" "b")` adds the classes "c", "d", and "b"
 
-`remove-class`
+`remove-class`, example `(remove-class "active")` removes the "active class"
 
 `content`: replace the content with what follows, example: `(content "some text")
 
