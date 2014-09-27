@@ -44,16 +44,20 @@
 
 
 (defn modify-classes
-  [add-or-remove & classes]
+  [add-or-remove classes]
   (let [f (condp = add-or-remove
-            :add conj
-            :remove disj)]
+           :add (fn [orig-classes classes]
+                  (distinct (apply conj orig-classes classes)))
+           :remove (fn [orig-classes classes]
+                     (filterv #(not ((set classes) %)) orig-classes)))]
+
     (fn [node]
       (let [attrs (node/attrs node)
-            orig-classes (set (clojure.string/split " " (:class attrs)))
-            new-classes (apply f orig-classes classes)
+            orig-classes (clojure.string/split (:class attrs) #"\s+")
+            new-classes (f orig-classes classes)
             new-attrs (merge attrs {:class (util/join-classes new-classes)})]
         (make-node (node/tag node) new-attrs (node/body node))))))
+
 
 (defn add-class'
   [& classes]
