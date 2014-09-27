@@ -1,11 +1,12 @@
 (ns sablono-tools.test.core
   (:require-macros [cemerick.cljs.test :refer (is deftest with-test run-tests testing test-var)])
   (:require [cemerick.cljs.test :as t] ;; cemerick.cljs.test must be required even if not explicitly used
-            [clojure.zip :as zip]
-            [sablono-tools.node-accessors :refer [attr?]]
+            [sablono-tools.node-accessors :refer [attr? attr=]]
             [sablono-tools.node-predicates :refer [any-node id-matcher tag-matcher
                                                    conjunction disjunction]]
-            [sablono-tools.transformations :refer [set-attr replace-vars content]]
+            [sablono-tools.transformations :refer [set-attr remove-attr
+                                                   add-class remove-class
+                                                   replace-vars content]]
             [sablono-tools.core :refer [template]]))
 
 
@@ -99,14 +100,42 @@
 
 
 (deftest set-attr-test
-  (let [source [:div {:level :beginner}]
+  (let [source [:div {:level "beginner"}]
 
-        forms [[any-node] (set-attr :level :advanced :locale "zh-TW")]
+        forms [[any-node] (set-attr :level "advanced" :locale "zh-TW")]
 
-        expected [:div {:level :advanced :locale "zh-TW"}]]
+        expected [:div {:level "advanced" :locale "zh-TW"}]]
 
     (is (= (template source forms) expected)
         "set-attr-test failed")))
+
+
+(deftest remove-attr-test
+  (let [source [:div {:status "pending"}
+                [:p {:status "approved"}]]
+
+        forms [[(attr= :status "approved")] (remove-attr :status)]
+
+        expected [:div {:status "pending"}
+                  [:p]]]
+
+    (is (= (template source forms) expected)
+        "remove-attr-test failed")))
+
+
+(deftest add-and-remove-class-test
+  (let [source [:section {:class "a b"}
+                [:div {:class "a"}]]
+
+        forms [[:section] (add-class "c" "d" "b")
+               [:div] (add-class "f")
+               [any-node] (remove-class "a")]
+
+        expected [:section {:class "b c d"}
+                  [:div {:class "f"}]]]
+
+    (is (= (template source forms) expected)
+        "add-and-remove-class-test failed")))
 
 
 (deftest tag-and-content-test
