@@ -62,14 +62,14 @@ several selectors with the special form `:>` betwwen them, example: `[:p :> (att
 
 `add-class`, example `(add-class "c" "d" "b")` adds the classes "c", "d", and "b"
 
-`remove-class`, example `(remove-class "active")` removes the "active class"
+`remove-class`, example `(remove-class "active")` removes the "active" class
 
 `content`: replace the content with what follows, example: `(content "some text")
 
 `replace-vars`: replace any ${var} in text or attributes by the value found in the map,
 example: `(replace-vars {:name "User" :group "Client"})`
 
-Please see the [test cases](test/sablono-tools/core.cljs) for further examples.
+Please see the [test cases](test/sablono-tools/test/core.cljs) for further examples.
 
 ## Differences from Enlive
 
